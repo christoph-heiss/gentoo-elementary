@@ -1,0 +1,20 @@
+diff --git a/meson.build b/meson.build
+index 4914586..54fd264 100644
+--- a/meson.build
++++ b/meson.build
+@@ -20,4 +20,7 @@ meson.add_install_script('meson/post_install.py')
+ subdir('data')
+ subdir('po')
+ subdir('src')
+-subdir('test')
++
++if get_option('test')
++    subdir('test')
++endif
+diff --git a/meson_options.txt b/meson_options.txt
+new file mode 100644
+index 0000000..604b860
+--- /dev/null
++++ b/meson_options.txt
+@@ -0,0 +1 @@
++option('test', type: 'boolean', value: true)

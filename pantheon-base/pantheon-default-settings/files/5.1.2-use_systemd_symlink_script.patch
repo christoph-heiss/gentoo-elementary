@@ -1,0 +1,88 @@
+From cb63d20703052675f1a2ec790b812c97c4cc212e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Daniel=20For=C3=A9?= <daniel@elementary.io>
+Date: Wed, 29 Apr 2020 11:41:45 -0700
+Subject: [PATCH] Use symlink script from systemd (#169)
+
+---
+ accountsservice/create-symlink.py | 24 ------------------------
+ accountsservice/meson.build       |  2 +-
+ meson.build                       |  2 ++
+ meson/create-symlink.sh           | 12 ++++++++++++
+ 6 files changed, 17 insertions(+), 26 deletions(-)
+ delete mode 100644 accountsservice/create-symlink.py
+ create mode 100644 meson/create-symlink.sh
+
+diff --git a/accountsservice/create-symlink.py b/accountsservice/create-symlink.py
+deleted file mode 100644
+index e502134..0000000
+--- a/accountsservice/create-symlink.py
++++ /dev/null
+@@ -1,24 +0,0 @@
+-#!/usr/bin/env python3
+-
+-import os
+-import sys
+-
+-if len(sys.argv) < 3:
+-    print('Usage: create-symlink.py SOURCE DESTINATION')
+-    sys.exit(1)
+-
+-src = sys.argv[1]
+-dest = sys.argv[2]
+-
+-if 'MESON_INSTALL_DESTDIR_PREFIX' in os.environ:
+-    src = os.path.join(os.environ['MESON_INSTALL_DESTDIR_PREFIX'], src)
+-    dest = os.path.join(os.environ['MESON_INSTALL_DESTDIR_PREFIX'], dest)
+-
+-if os.path.isabs(src):
+-    src = os.path.relpath(src, os.path.dirname(os.path.realpath(dest)))
+-
+-if not os.path.exists(dest):
+-    print('Creating symbolic link: ' + dest + ' -> ' + src)
+-    if not os.path.exists(os.path.dirname(dest)):
+-        os.makedirs(os.path.dirname(dest))
+-    os.symlink(src, dest)
+diff --git a/accountsservice/meson.build b/accountsservice/meson.build
+index 55a7640..19d6cbb 100644
+--- a/accountsservice/meson.build
++++ b/accountsservice/meson.build
+@@ -18,7 +18,7 @@ act_dep = dependency('accountsservice')
+ act_interfacesdir = act_dep.get_pkgconfig_variable('interfacesdir', define_variable: ['datadir', datadir], default: datadir /'accountsservice' / 'interfaces')
+ 
+ meson.add_install_script(
+-    'create-symlink.py',
++    symlink,
+     join_paths(dbus_interfaces_dir, 'io.elementary.pantheon.AccountsService.xml'),
+     join_paths(act_interfacesdir, 'io.elementary.pantheon.AccountsService.xml'),
+ )
+diff --git a/meson.build b/meson.build
+index dcd780e..a19967f 100644
+--- a/meson.build
++++ b/meson.build
+@@ -10,6 +10,8 @@ schemadir = join_paths(datadir, 'glib-2.0', 'schemas')
+ 
+ meson.add_install_script('meson/post_install.py', schemadir)
+ 
++symlink = join_paths(meson.current_source_dir (), 'meson', 'create-symlink.sh')
++
+ # Setup system wide global environment for applications
+ install_subdir(
+     'profile.d',
+diff --git a/meson/create-symlink.sh b/meson/create-symlink.sh
+new file mode 100644
+index 0000000..cdd5214
+--- /dev/null
++++ b/meson/create-symlink.sh
+@@ -0,0 +1,12 @@
++#!/bin/sh
++set -eu
++
++# this is needed mostly because $DESTDIR is provided as a variable,
++# and we need to create the target directory...
++
++mkdir -vp "$(dirname "${DESTDIR:-}$2")"
++if [ "$(dirname $1)" = . -o "$(dirname $1)" = .. ]; then
++    ln -vfs -T -- "$1" "${DESTDIR:-}$2"
++else
++    ln -vfs -T --relative -- "${DESTDIR:-}$1" "${DESTDIR:-}$2"
++fi

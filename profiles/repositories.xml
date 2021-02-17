@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE repositories SYSTEM "/dtd/repositories.dtd">
+<repositories xmlns="" version="1.0">
+  <repo quality="experimental" status="unofficial">
+    <name>elementary</name>
+    <description lang="en">The elementary OS experience for Gentoo Linux.</description>
+    <homepage>http://www.elementaryos.org/</homepage>
+    <owner type="person">
+      <email>contact@christoph-heiss.at</email>
+      <name>Christoph Heiss</name>
+    </owner>
+    <source type="git">git://github.com/christoph-heiss/gentoo-elementary.git</source>
+    <feed>https://github.com/christoph-heiss/gentoo-elementary/commits/master.atom</feed>
+  </repo>
+</repositories>
+

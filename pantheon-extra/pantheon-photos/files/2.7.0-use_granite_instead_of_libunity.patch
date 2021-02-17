@@ -1,0 +1,424 @@
+From 0d20e8d7afcc4bbb5c56a4fdc207857d567adb73 Mon Sep 17 00:00:00 2001
+From: Gustavo Marques <pushstarttocontinue@outlook.com>
+Date: Thu, 11 Jun 2020 20:09:26 +0000
+Subject: [PATCH] Use granite instead of libunity (#571)
+
+* ditch libunity
+
+* granite >=5.2.5
+---
+ README.md                       |  3 +-
+ meson.build                     |  8 +--
+ meson_options.txt               |  1 -
+ po/POTFILES                     |  1 -
+ src/Dialogs/ProgressDialog.vala | 24 ++++-----
+ src/UnityProgressBar.vala       | 96 ---------------------------------
+ src/Views/ImportPage.vala       | 18 ++-----
+ src/Views/ImportQueuePage.vala  | 20 +++----
+ src/library/TopDisplay.vala     | 19 ++-----
+ src/meson.build                 |  1 -
+ 10 files changed, 28 insertions(+), 163 deletions(-)
+ delete mode 100644 src/UnityProgressBar.vala
+
+diff --git a/README.md b/README.md
+index 689d9deb..d534e68f 100644
+--- a/README.md
++++ b/README.md
+@@ -16,7 +16,7 @@ You'll need the following dependencies:
+ * libgexiv2-dev
+ * libglib2.0-dev
+ * libgphoto2-dev
+-* libgranite-dev >= 5.2.0
++* libgranite-dev >= 5.2.5
+ * libgstreamer1.0-dev
+ * libgstreamer-plugins-base1.0-dev
+ * libgtk-3-dev
+@@ -27,7 +27,6 @@ You'll need the following dependencies:
+ * libsignon-glib-dev
+ * libsoup2.4-dev
+ * libsqlite3-dev
+-* libunity-dev
+ * libwebkit2gtk-4.0-dev
+ * libwebp-dev
+ * libxml2
+diff --git a/meson.build b/meson.build
+index d97f1f45..5edb5314 100644
+--- a/meson.build
++++ b/meson.build
+@@ -35,7 +35,7 @@ gstreamer_dep = dependency('gstreamer-1.0', version: '>=1.0.0')
+ gstreamer_base_dep = dependency('gstreamer-base-1.0', version: '>=1.0.0')
+ gstreamer_plugins_base_dep = dependency('gstreamer-plugins-base-1.0', version: '>=1.0.0')
+ gstreamer_pbutils_dep = dependency('gstreamer-pbutils-1.0', version: '>=1.0.0')
+-granite_dep = dependency('granite', version: '>=5.2.0')
++granite_dep = dependency('granite', version: '>=5.2.5')
+ gtk_dep = dependency('gtk+-3.0', version: '>=3.6.0')
+ gudev_dep = dependency('gudev-1.0', version: '>=145')
+ json_glib_dep = dependency('json-glib-1.0')
+@@ -85,12 +85,6 @@ dependencies = [
+     config_dep
+ ]
+ 
+-if get_option('libunity')
+-    unity_dep = dependency('unity')
+-    add_project_arguments('--define=UNITY_SUPPORT=1', language : 'vala')
+-    dependencies += unity_dep
+-endif
+-
+ add_project_arguments(['--vapidir', join_paths(meson.current_source_dir(), 'vapi')], language: 'vala')
+ 
+ #FIXME: Move the Resource files when we have the required GLib version
+diff --git a/meson_options.txt b/meson_options.txt
+index 9eec6d23..c6f8e481 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -1,3 +1,2 @@
+-option ('libunity', type : 'boolean', value : true)
+ option ('documentation', type : 'boolean', value : false)
+ option ('plugins', type : 'boolean', value : true)
+diff --git a/po/POTFILES b/po/POTFILES
+index f840c27b..98a52676 100644
+--- a/po/POTFILES
++++ b/po/POTFILES
+@@ -36,7 +36,6 @@ src/ThumbnailCache.vala
+ src/Thumbnail.vala
+ src/TimedQueue.vala
+ src/Tombstone.vala
+-src/UnityProgressBar.vala
+ src/Upgrades.vala
+ src/VideoMetadata.vala
+ src/VideoMonitor.vala
+diff --git a/src/Dialogs/ProgressDialog.vala b/src/Dialogs/ProgressDialog.vala
+index eea555e1..2bf79dea 100644
+--- a/src/Dialogs/ProgressDialog.vala
++++ b/src/Dialogs/ProgressDialog.vala
+@@ -26,9 +26,6 @@ public class ProgressDialog : Gtk.Dialog {
+     private int update_every = 1;
+     private int minimum_on_screen_time_msec = 500;
+     private ulong time_started;
+-#if UNITY_SUPPORT
+-    UnityProgressBar uniprobar = UnityProgressBar.get_instance ();
+-#endif
+ 
+     public ProgressDialog (Gtk.Window? owner, string text, Cancellable? cancellable = null) {
+         this.cancellable = cancellable;
+@@ -98,19 +95,16 @@ public class ProgressDialog : Gtk.Dialog {
+         progress_bar.set_fraction (pct);
+         progress_bar.set_text (_ ("%d%%").printf ((int) (pct * 100.0)));
+ 
+-#if UNITY_SUPPORT
+         //UnityProgressBar: set progress
+-        uniprobar.set_progress (pct);
+-#endif
++        Granite.Services.Application.set_progress.begin (pct);
+     }
+ 
+     public void set_status (string text) {
+         progress_bar.set_text (text);
+ 
+-#if UNITY_SUPPORT
+         //UnityProgressBar: try to draw progress bar
+-        uniprobar.set_visible (true);
+-#endif
++        Granite.Services.Application.set_progress_visible.begin (true);
++
+         show_all ();
+     }
+ 
+@@ -136,10 +130,10 @@ public class ProgressDialog : Gtk.Dialog {
+     }
+ 
+     public new void close () {
+-#if UNITY_SUPPORT
+         //UnityProgressBar: reset
+-        uniprobar.reset ();
+-#endif
++        Granite.Services.Application.set_progress_visible.begin (false);
++        Granite.Services.Application.set_progress.begin (0.0);
++
+         hide ();
+         destroy ();
+     }
+@@ -168,10 +162,10 @@ public class ProgressDialog : Gtk.Dialog {
+             // If there is still more work to do for at least MINIMUM_ON_SCREEN_TIME_MSEC,
+             // finally display the dialog.
+             if (ttc > minimum_on_screen_time_msec) {
+-#if UNITY_SUPPORT
++
+                 //UnityProgressBar: try to draw progress bar
+-                uniprobar.set_visible (true);
+-#endif
++                Granite.Services.Application.set_progress_visible.begin (true);
++
+                 show_all ();
+                 spin_event_loop ();
+             }
+diff --git a/src/UnityProgressBar.vala b/src/UnityProgressBar.vala
+deleted file mode 100644
+index e003c205..00000000
+--- a/src/UnityProgressBar.vala
++++ /dev/null
+@@ -1,96 +0,0 @@
+-/*
+-* Copyright (c) 2010-2013 Yorba Foundation
+-*
+-* This program is free software; you can redistribute it and/or
+-* modify it under the terms of the GNU Lesser General Public
+-* License as published by the Free Software Foundation; either
+-* version 2.1 of the License, or (at your option) any later version.
+-*
+-* This program is distributed in the hope that it will be useful,
+-* but WITHOUT ANY WARRANTY; without even the implied warranty of
+-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+-* General Public License for more details.
+-*
+-* You should have received a copy of the GNU General Public
+-* License along with this program; if not, write to the
+-* Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+-* Boston, MA 02110-1301 USA
+-*/
+-
+-#if UNITY_SUPPORT
+-public class UnityProgressBar : Object {
+-
+-    private static Unity.LauncherEntry l = Unity.LauncherEntry.get_for_desktop_id ("io.elementary.photos.desktop");
+-    private static UnityProgressBar? visible_uniprobar;
+-
+-    private double progress;
+-    private bool visible;
+-
+-    public static UnityProgressBar get_instance () {
+-        if (visible_uniprobar == null) {
+-            visible_uniprobar = new UnityProgressBar ();
+-        }
+-
+-        return visible_uniprobar;
+-    }
+-
+-    private UnityProgressBar () {
+-        progress = 0.0;
+-        visible = false;
+-    }
+-
+-    ~UnityProgressBar () {
+-        reset_progress_bar ();
+-    }
+-
+-    public double get_progress () {
+-        return progress;
+-    }
+-
+-    public void set_progress (double percent) {
+-        progress = percent;
+-        update_visibility ();
+-    }
+-
+-    private void update_visibility () {
+-        set_progress_bar (this, progress);
+-    }
+-
+-    public bool get_visible () {
+-        return visible;
+-    }
+-
+-    public void set_visible (bool visible) {
+-        this.visible = visible;
+-
+-        if (!visible) {
+-            //if not visible and currently displayed, remove Unity progress bar
+-            reset_progress_bar ();
+-        } else {
+-            //update_visibility if this progress bar wants to be drawn
+-            update_visibility ();
+-        }
+-    }
+-
+-    public void reset () {
+-        set_visible (false);
+-        progress = 0.0;
+-    }
+-
+-    private static void set_progress_bar (UnityProgressBar uniprobar, double percent) {
+-        //set new visible ProgressBar
+-        visible_uniprobar = uniprobar;
+-        if (!l.progress_visible)
+-            l.progress_visible = true;
+-        l.progress = percent;
+-    }
+-
+-    private static void reset_progress_bar () {
+-        //reset to default values
+-        visible_uniprobar = null;
+-        l.progress = 0.0;
+-        l.progress_visible = false;
+-    }
+-}
+-
+-#endif
+diff --git a/src/Views/ImportPage.vala b/src/Views/ImportPage.vala
+index cb1c2f30..56551e3e 100644
+--- a/src/Views/ImportPage.vala
++++ b/src/Views/ImportPage.vala
+@@ -710,10 +710,6 @@ public class ImportPage : CheckerboardPage {
+     private Gtk.Menu import_context_menu;
+     private GLib.Settings ui_settings;
+ 
+-#if UNITY_SUPPORT
+-    UnityProgressBar uniprobar = UnityProgressBar.get_instance ();
+-#endif
+-
+     public enum RefreshResult {
+         OK,
+         BUSY,
+@@ -1333,17 +1329,14 @@ public class ImportPage : CheckerboardPage {
+         // Associate files (for RAW+JPEG)
+         auto_match_raw_jpeg (import_list);
+ 
+-#if UNITY_SUPPORT
+         //UnityProgressBar: try to draw progress bar
+-        uniprobar.set_visible (true);
+-#endif
++        Granite.Services.Application.set_progress_visible.begin (true);
+ 
+         load_previews_and_metadata (import_list);
+ 
+-#if UNITY_SUPPORT
+         //UnityProgressBar: reset
+-        uniprobar.reset ();
+-#endif
++        Granite.Services.Application.set_progress_visible.begin (false);
++        Granite.Services.Application.set_progress.begin (0.0);
+ 
+         progress_bar.visible = false;
+         progress_bar.set_ellipsize (Pango.EllipsizeMode.NONE);
+@@ -1697,10 +1690,9 @@ public class ImportPage : CheckerboardPage {
+             import_sources.add (import_source);
+ 
+             progress_bar.set_fraction ((double) (++loaded_photos) / (double) import_list.size);
+-#if UNITY_SUPPORT
++
+             //UnityProgressBar: set progress
+-            uniprobar.set_progress ((double) (loaded_photos) / (double) import_list.size);
+-#endif
++            Granite.Services.Application.set_progress.begin ((double) (loaded_photos) / (double) import_list.size);
+ 
+             // spin the event loop so the UI doesn't freeze
+             spin_event_loop ();
+diff --git a/src/Views/ImportQueuePage.vala b/src/Views/ImportQueuePage.vala
+index bd8608b2..d7cbe317 100644
+--- a/src/Views/ImportQueuePage.vala
++++ b/src/Views/ImportQueuePage.vala
+@@ -26,10 +26,6 @@ public class ImportQueuePage : SinglePhotoPage {
+     private Gtk.ProgressBar progress_bar = new Gtk.ProgressBar ();
+     private bool stopped = false;
+ 
+-#if UNITY_SUPPORT
+-    UnityProgressBar uniprobar = UnityProgressBar.get_instance ();
+-#endif
+-
+     public signal void batch_added (BatchImport batch_import);
+ 
+     public signal void batch_removed (BatchImport batch_import);
+@@ -37,10 +33,9 @@ public class ImportQueuePage : SinglePhotoPage {
+     public ImportQueuePage () {
+         base (NAME, false);
+ 
+-#if UNITY_SUPPORT
+         //UnityProgressBar: try to draw progress bar
+-        uniprobar.set_visible (true);
+-#endif
++        Granite.Services.Application.set_progress_visible.begin (true);
++
+     }
+ 
+     public override Gtk.Toolbar get_toolbar () {
+@@ -132,10 +127,9 @@ public class ImportQueuePage : SinglePhotoPage {
+         double pct = (completed_bytes <= total_bytes) ? (double) completed_bytes / (double) total_bytes
+                      : 0.0;
+         progress_bar.set_fraction (pct);
+-#if UNITY_SUPPORT
++
+         //UnityProgressBar: set progress
+-        uniprobar.set_progress (pct);
+-#endif
++        Granite.Services.Application.set_progress (pct);
+     }
+ 
+     private void on_imported (ThumbnailSource source, Gdk.Pixbuf pixbuf, int to_follow) {
+@@ -184,10 +178,10 @@ public class ImportQueuePage : SinglePhotoPage {
+             progress_bar.set_ellipsize (Pango.EllipsizeMode.NONE);
+             progress_bar.set_text ("");
+             progress_bar.set_fraction (0.0);
+-#if UNITY_SUPPORT
++
+             //UnityProgressBar: reset
+-            uniprobar.reset ();
+-#endif
++            Granite.Services.Application.set_progress_visible.begin (false);
++            Granite.Services.Application.set_progress.begin (0.0);
+ 
+             // blank the display
+             blank_display ();
+diff --git a/src/library/TopDisplay.vala b/src/library/TopDisplay.vala
+index fe94d976..112fb334 100644
+--- a/src/library/TopDisplay.vala
++++ b/src/library/TopDisplay.vala
+@@ -26,10 +26,6 @@ public class TopDisplay : Gtk.Stack {
+     private uint background_progress_pulse_id = 0U;
+     private const int BACKGROUND_PROGRESS_PULSE_MSEC = 250;
+ 
+-#if UNITY_SUPPORT
+-    UnityProgressBar uniprobar;
+-#endif
+-
+     private bool show_progress {
+         set {
+             if (value) {
+@@ -72,9 +68,6 @@ public class TopDisplay : Gtk.Stack {
+ 
+         add (title_label);
+         add_named (progress_grid, "progress");
+-#if UNITY_SUPPORT
+-        uniprobar = UnityProgressBar.get_instance ();
+-#endif
+     }
+ 
+     public void start_pulse_background_progress_bar (string label, int priority) {
+@@ -133,11 +126,10 @@ public class TopDisplay : Gtk.Stack {
+         background_progress_label.label = _ ("%s (%d%%)").printf (label, (int) (fraction * 100.0));
+         show_progress = true;
+ 
+-#if UNITY_SUPPORT
+         //UnityProgressBar: try to draw & set progress
+-        uniprobar.set_visible (true);
+-        uniprobar.set_progress (fraction);
+-#endif
++        Granite.Services.Application.set_progress_visible.begin (true);
++        Granite.Services.Application.set_progress.begin (fraction);
++
+     }
+ 
+     public void clear_background_progress_bar (int priority) {
+@@ -153,9 +145,8 @@ public class TopDisplay : Gtk.Stack {
+         background_progress_label.label = "";
+         show_progress = false;
+ 
+-#if UNITY_SUPPORT
+         //UnityProgressBar: reset
+-        uniprobar.reset ();
+-#endif
++        Granite.Services.Application.set_progress_visible.begin (false);
++        Granite.Services.Application.set_progress.begin (0.0);
+     }
+ }
+diff --git a/src/meson.build b/src/meson.build
+index 7b74206e..45bf4c1b 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -56,7 +56,6 @@ photos_files = files(
+     'Thumbnail.vala',
+     'TimedQueue.vala',
+     'Tombstone.vala',
+-    'UnityProgressBar.vala',
+     'Upgrades.vala',
+     'VideoMetadata.vala',
+     'VideoMonitor.vala',

@@ -1,0 +1,12 @@
+diff --git a/session/meson.build b/session/meson.build
+index d1474e4..399e287 100644
+--- a/session/meson.build
++++ b/session/meson.build
+@@ -19,7 +19,6 @@ gsd_components = [
+   'org.gnome.SettingsDaemon.PrintNotifications',
+   'org.gnome.SettingsDaemon.Rfkill',
+   'org.gnome.SettingsDaemon.Sharing',
+-  'org.gnome.SettingsDaemon.Smartcard',
+   'org.gnome.SettingsDaemon.Sound',
+   'org.gnome.SettingsDaemon.Wacom',
+   'org.gnome.SettingsDaemon.XSettings',

@@ -1,0 +1,414 @@
+From 183a7b6c2bf0bb9792585310fbeab2f0cc5c118f Mon Sep 17 00:00:00 2001
+From: worldofpeace <worldofpeace@protonmail.ch>
+Date: Mon, 20 Apr 2020 19:15:56 -0400
+Subject: [PATCH] Build with Meson (#119)
+
+---
+ accountsservice/create-symlink.py             |  24 +++++++
+ accountsservice/meson.build                   |  24 +++++++
+ .../appcenter.blacklist                       |   0
+ .../default-testpage.pdf                      | Bin
+ debian/elementary-default-settings.links      |   1 -
+ debian/elementary-printer-test-page.install   |   2 +-
+ debian/install                                |  10 +--
+ debian/rules                                  |   5 +-
+ settings.ini => gtk/settings.ini              |   0
+ meson.build                                   |  68 ++++++++++++++++++
+ meson/post_install.py                         |  12 ++++
+ meson_options.txt                             |  14 ++++
+ ...e => default-settings.gschema.override.in} |   3 +-
+ overrides/meson.build                         |  21 ++++++
+ overrides/plank-dockitems.gschema.override    |   2 +
+ .../sessioninstaller.desktop                  |   0
+ .inputrc => skel/.inputrc                     |   0
+ skel/meson.build                              |  17 +++++
+ .../launchers/gala-multitaskingview.dockitem  |   0
+ .../io.elementary.appcenter.dockitem          |   0
+ .../launchers/io.elementary.calendar.dockitem |   0
+ .../launchers/io.elementary.music.dockitem    |   0
+ .../launchers/io.elementary.photos.dockitem   |   0
+ .../io.elementary.switchboard.dockitem        |   0
+ .../launchers/io.elementary.videos.dockitem   |   0
+ .../launchers/org.gnome.Epiphany.dockitem     |   0
+ .../launchers/org.pantheon.mail.dockitem      |   0
+ 30 files changed, 234 insertions(+), 20 deletions(-)
+ create mode 100644 accountsservice/create-symlink.py
+ create mode 100644 accountsservice/meson.build
+ rename appcenter.blacklist => appcenter/appcenter.blacklist (100%)
+ rename default-testpage.pdf => cups/default-testpage.pdf (100%)
+ delete mode 100644 debian/elementary-default-settings.links
+ rename settings.ini => gtk/settings.ini (100%)
+ create mode 100644 meson.build
+ create mode 100755 meson/post_install.py
+ create mode 100644 meson_options.txt
+ rename overrides/{default-settings.gschema.override => default-settings.gschema.override.in} (92%)
+ create mode 100644 overrides/meson.build
+ create mode 100644 overrides/plank-dockitems.gschema.override
+ rename sessioninstaller.desktop => sessioninstaller/sessioninstaller.desktop (100%)
+ rename .inputrc => skel/.inputrc (100%)
+ create mode 100644 skel/meson.build
+ rename {plank => skel/plank}/dock1/launchers/gala-multitaskingview.dockitem (100%)
+ rename {plank => skel/plank}/dock1/launchers/io.elementary.appcenter.dockitem (100%)
+ rename {plank => skel/plank}/dock1/launchers/io.elementary.calendar.dockitem (100%)
+ rename {plank => skel/plank}/dock1/launchers/io.elementary.music.dockitem (100%)
+ rename {plank => skel/plank}/dock1/launchers/io.elementary.photos.dockitem (100%)
+ rename {plank => skel/plank}/dock1/launchers/io.elementary.switchboard.dockitem (100%)
+ rename {plank => skel/plank}/dock1/launchers/io.elementary.videos.dockitem (100%)
+ rename {plank => skel/plank}/dock1/launchers/org.gnome.Epiphany.dockitem (100%)
+ rename {plank => skel/plank}/dock1/launchers/org.pantheon.mail.dockitem (100%)
+
+diff --git a/accountsservice/create-symlink.py b/accountsservice/create-symlink.py
+new file mode 100644
+index 0000000..e502134
+--- /dev/null
++++ b/accountsservice/create-symlink.py
+@@ -0,0 +1,24 @@
++#!/usr/bin/env python3
++
++import os
++import sys
++
++if len(sys.argv) < 3:
++    print('Usage: create-symlink.py SOURCE DESTINATION')
++    sys.exit(1)
++
++src = sys.argv[1]
++dest = sys.argv[2]
++
++if 'MESON_INSTALL_DESTDIR_PREFIX' in os.environ:
++    src = os.path.join(os.environ['MESON_INSTALL_DESTDIR_PREFIX'], src)
++    dest = os.path.join(os.environ['MESON_INSTALL_DESTDIR_PREFIX'], dest)
++
++if os.path.isabs(src):
++    src = os.path.relpath(src, os.path.dirname(os.path.realpath(dest)))
++
++if not os.path.exists(dest):
++    print('Creating symbolic link: ' + dest + ' -> ' + src)
++    if not os.path.exists(os.path.dirname(dest)):
++        os.makedirs(os.path.dirname(dest))
++    os.symlink(src, dest)
+diff --git a/accountsservice/meson.build b/accountsservice/meson.build
+new file mode 100644
+index 0000000..fb4c4c4
+--- /dev/null
++++ b/accountsservice/meson.build
+@@ -0,0 +1,24 @@
++dbus_dep = dependency('dbus-1')
++dbus_interfaces_dir = dbus_dep.get_pkgconfig_variable('interfaces_dir', define_variable: ['datadir', datadir])
++
++install_data(
++    'io.elementary.pantheon.AccountsService.xml',
++    install_dir: dbus_interfaces_dir
++)
++
++polkit_dep = dependency('polkit-gobject-1')
++polkit_actiondir = polkit_dep.get_pkgconfig_variable('actiondir', define_variable: ['prefix', prefix])
++
++install_data(
++    'io.elementary.pantheon.AccountsService.policy',
++    install_dir: polkit_actiondir
++)
++
++act_dep = dependency('accountsservice')
++act_interfacesdir = act_dep.get_pkgconfig_variable('interfacesdir', define_variable: ['datadir', datadir])
++
++meson.add_install_script(
++    'create-symlink.py',
++    join_paths(dbus_interfaces_dir, 'io.elementary.pantheon.AccountsService.xml'),
++    join_paths(act_interfacesdir, 'io.elementary.pantheon.AccountsService.xml'),
++)
+diff --git a/appcenter.blacklist b/appcenter/appcenter.blacklist
+similarity index 100%
+rename from appcenter.blacklist
+rename to appcenter/appcenter.blacklist
+diff --git a/default-testpage.pdf b/cups/default-testpage.pdf
+similarity index 100%
+rename from default-testpage.pdf
+rename to cups/default-testpage.pdf
+diff --git a/debian/elementary-default-settings.links b/debian/elementary-default-settings.links
+deleted file mode 100644
+index e0f1b62..0000000
+--- a/debian/elementary-default-settings.links
++++ /dev/null
+@@ -1 +0,0 @@
+-/usr/share/dbus-1/interfaces/io.elementary.pantheon.AccountsService.xml /usr/share/accountsservice/interfaces/io.elementary.pantheon.AccountsService.xml
+diff --git a/debian/elementary-printer-test-page.install b/debian/elementary-printer-test-page.install
+index 77329bd..464106d 100644
+--- a/debian/elementary-printer-test-page.install
++++ b/debian/elementary-printer-test-page.install
+@@ -1 +1 @@
+-default-testpage.pdf usr/share/cups/data
++cups/default-testpage.pdf usr/share/cups/data
+diff --git a/debian/install b/debian/install
+index d28c770..21c9319 100644
+--- a/debian/install
++++ b/debian/install
+@@ -1,10 +1,10 @@
+ accountsservice/io.elementary.pantheon.AccountsService.xml /usr/share/dbus-1/interfaces/
+ accountsservice/io.elementary.pantheon.AccountsService.policy /usr/share/polkit-1/actions/
+-appcenter.blacklist /etc/io.elementary.appcenter/
+-plank/dock1 /etc/skel/.config/plank/
++appcenter/appcenter.blacklist /etc/io.elementary.appcenter/
++skel/plank/dock1 /etc/skel/.config/plank/
+ profile.d/*.sh /etc/profile.d/
+-sessioninstaller.desktop /usr/share/applications/
+-settings.ini /etc/gtk-3.0/
++sessioninstaller/sessioninstaller.desktop /usr/share/applications/
++gtk/settings.ini /etc/gtk-3.0/
+ sudoers.d/* /etc/sudoers.d/
+ overrides/*.gschema.override /usr/share/glib-2.0/schemas
+-.inputrc /etc/skel/
++skel/.inputrc /etc/skel/
+diff --git a/debian/rules b/debian/rules
+index fecd984..57e9720 100755
+--- a/debian/rules
++++ b/debian/rules
+@@ -1,7 +1,4 @@
+ #!/usr/bin/make -f
+ 
+ %:
+-	dh $@
+-
+-override_dh_install:
+-	dh_install --fail-missing
++	dh $@ --buildsystem=meson
+diff --git a/settings.ini b/gtk/settings.ini
+similarity index 100%
+rename from settings.ini
+rename to gtk/settings.ini
+diff --git a/meson.build b/meson.build
+new file mode 100644
+index 0000000..dcd780e
+--- /dev/null
++++ b/meson.build
+@@ -0,0 +1,68 @@
++project(
++    'elementary-default-settings',
++    version: '5.1.2',
++)
++
++prefix = get_option('prefix')
++datadir = join_paths(prefix, get_option('datadir'))
++sysconfdir = get_option('sysconfdir')
++schemadir = join_paths(datadir, 'glib-2.0', 'schemas')
++
++meson.add_install_script('meson/post_install.py', schemadir)
++
++# Setup system wide global environment for applications
++install_subdir(
++    'profile.d',
++    install_dir: join_paths(sysconfdir, 'profile.d'),
++    strip_directory : true
++)
++
++# elementary Plymouth Theme
++install_subdir(
++    'plymouth/elementary',
++    install_dir: join_paths(datadir, 'plymouth', 'themes')
++)
++
++install_data(
++    'plymouth/ubuntu-text.plymouth',
++    install_dir: join_paths(datadir, 'plymouth', 'themes')
++)
++
++# Sudo password feedback in terminals
++install_data(
++    'sudoers.d/pwfeedback',
++    install_dir: join_paths(sysconfdir, 'sudoers.d')
++)
++
++# CUPS Printing testpage
++install_data(
++    'cups/default-testpage.pdf',
++    install_dir: join_paths(datadir, 'cups', 'data')
++)
++
++# GTK3 Settings
++install_data(
++    'gtk/settings.ini',
++    install_dir: join_paths(sysconfdir, 'gtk-3.0')
++)
++
++# So SessionInstaller can have an Icon
++install_data(
++    'sessioninstaller/sessioninstaller.desktop',
++    install_dir: join_paths(datadir, 'applications')
++)
++
++# Default Appcenter Blacklist
++install_data(
++    'appcenter/appcenter.blacklist',
++    install_dir: join_paths(sysconfdir, 'appcenter')
++)
++
++# Default gsettings overrides
++subdir('overrides')
++
++# AccountsService extension for Greeter.
++subdir('accountsservice')
++
++# System skeleton
++subdir('skel')
+diff --git a/meson/post_install.py b/meson/post_install.py
+new file mode 100755
+index 0000000..731064f
+--- /dev/null
++++ b/meson/post_install.py
+@@ -0,0 +1,12 @@
++#!/usr/bin/env python3
++
++import os
++import sys
++import subprocess
++
++if 'DESTDIR' not in os.environ:
++    schemadir = sys.argv[1]
++
++    print('Compiling GSettings schemas...')
++    subprocess.call(['glib-compile-schemas',
++                    schemadir])
+diff --git a/meson_options.txt b/meson_options.txt
+new file mode 100644
+index 0000000..8fd19ba
+--- /dev/null
++++ b/meson_options.txt
+@@ -0,0 +1,14 @@
++option('default-wallpaper',
++       type: 'string',
++       value: '/usr/share/backgrounds/elementaryos-default',
++       description: 'Path to default wallpaper to use in Pantheon.')
++
++option('plank-dockitems',
++       type: 'boolean',
++       value: true,
++       description: 'Install default Pantheon Plank dockitems')
++
++option('default-gsettings-overrides',
++       type: 'boolean',
++       value: true,
++       description: 'Install default Pantheon GSettings Overrides')
+diff --git a/overrides/default-settings.gschema.override b/overrides/default-settings.gschema.override.in
+similarity index 92%
+rename from overrides/default-settings.gschema.override
+rename to overrides/default-settings.gschema.override.in
+index a7cb903..4de1845 100644
+--- a/overrides/default-settings.gschema.override
++++ b/overrides/default-settings.gschema.override.in
+@@ -1,5 +1,4 @@
+ [net.launchpad.plank.dock.settings]
+-dock-items=['gala-multitaskingview.dockitem','org.gnome.Epiphany.dockitem','org.pantheon.mail.dockitem','io.elementary.calendar.dockitem','io.elementary.music.dockitem','io.elementary.videos.dockitem','io.elementary.photos.dockitem','io.elementary.switchboard.dockitem','io.elementary.appcenter.dockitem']
+ hide-delay=250
+ hide-mode='window-dodge'
+ show-dock-item=false
+@@ -13,7 +12,7 @@ show=1
+ 
+ [org.gnome.desktop.background]
+ picture-options='zoom'
+-picture-uri='file:///usr/share/backgrounds/elementaryos-default'
++picture-uri='file://@DEFAULT_WALLPAPER@'
+ primary-color='#000000'
+ 
+ [org.gnome.desktop.datetime]
+diff --git a/overrides/meson.build b/overrides/meson.build
+new file mode 100644
+index 0000000..b377ba4
+--- /dev/null
++++ b/overrides/meson.build
+@@ -0,0 +1,21 @@
++if get_option('default-gsettings-overrides')
++    default_wallpaper = get_option('default-wallpaper')
++
++    wallpaper_configuration = configuration_data()
++    wallpaper_configuration.set('DEFAULT_WALLPAPER', default_wallpaper)
++
++    settings_override = configure_file(
++        input: 'default-settings.gschema.override.in',
++        output: '@BASENAME@',
++        configuration: wallpaper_configuration,
++        install_dir: join_paths(schemadir)
++    )
++endif
++
++# Install conditionally because it's dependent on our dockitems being installed
++if get_option('plank-dockitems')
++    install_data(
++        'plank-dockitems.gschema.override',
++        install_dir: join_paths(schemadir)
++    )
++endif
+diff --git a/overrides/plank-dockitems.gschema.override b/overrides/plank-dockitems.gschema.override
+new file mode 100644
+index 0000000..72b38d4
+--- /dev/null
++++ b/overrides/plank-dockitems.gschema.override
+@@ -0,0 +1,2 @@
++[net.launchpad.plank.dock.settings]
++dock-items=['gala-multitaskingview.dockitem','org.gnome.Epiphany.dockitem','org.pantheon.mail.dockitem','io.elementary.calendar.dockitem','io.elementary.music.dockitem','io.elementary.videos.dockitem','io.elementary.photos.dockitem','io.elementary.switchboard.dockitem','io.elementary.appcenter.dockitem']
+diff --git a/sessioninstaller.desktop b/sessioninstaller/sessioninstaller.desktop
+similarity index 100%
+rename from sessioninstaller.desktop
+rename to sessioninstaller/sessioninstaller.desktop
+diff --git a/.inputrc b/skel/.inputrc
+similarity index 100%
+rename from .inputrc
+rename to skel/.inputrc
+diff --git a/skel/meson.build b/skel/meson.build
+new file mode 100644
+index 0000000..8b10291
+--- /dev/null
++++ b/skel/meson.build
+@@ -0,0 +1,17 @@
++skeldir = join_paths(sysconfdir, 'skel')
++
++# Planks Default DockItems
++if get_option('plank-dockitems')
++    install_subdir(
++        'plank',
++        install_dir: join_paths(skeldir, '.config')
++    )
++endif
++
++# Configuration file of GNU readline
++install_data(
++    '.inputrc',
++    install_dir: skeldir
++)
++
++
+diff --git a/plank/dock1/launchers/gala-multitaskingview.dockitem b/skel/plank/dock1/launchers/gala-multitaskingview.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/gala-multitaskingview.dockitem
+rename to skel/plank/dock1/launchers/gala-multitaskingview.dockitem
+diff --git a/plank/dock1/launchers/io.elementary.appcenter.dockitem b/skel/plank/dock1/launchers/io.elementary.appcenter.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/io.elementary.appcenter.dockitem
+rename to skel/plank/dock1/launchers/io.elementary.appcenter.dockitem
+diff --git a/plank/dock1/launchers/io.elementary.calendar.dockitem b/skel/plank/dock1/launchers/io.elementary.calendar.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/io.elementary.calendar.dockitem
+rename to skel/plank/dock1/launchers/io.elementary.calendar.dockitem
+diff --git a/plank/dock1/launchers/io.elementary.music.dockitem b/skel/plank/dock1/launchers/io.elementary.music.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/io.elementary.music.dockitem
+rename to skel/plank/dock1/launchers/io.elementary.music.dockitem
+diff --git a/plank/dock1/launchers/io.elementary.photos.dockitem b/skel/plank/dock1/launchers/io.elementary.photos.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/io.elementary.photos.dockitem
+rename to skel/plank/dock1/launchers/io.elementary.photos.dockitem
+diff --git a/plank/dock1/launchers/io.elementary.switchboard.dockitem b/skel/plank/dock1/launchers/io.elementary.switchboard.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/io.elementary.switchboard.dockitem
+rename to skel/plank/dock1/launchers/io.elementary.switchboard.dockitem
+diff --git a/plank/dock1/launchers/io.elementary.videos.dockitem b/skel/plank/dock1/launchers/io.elementary.videos.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/io.elementary.videos.dockitem
+rename to skel/plank/dock1/launchers/io.elementary.videos.dockitem
+diff --git a/plank/dock1/launchers/org.gnome.Epiphany.dockitem b/skel/plank/dock1/launchers/org.gnome.Epiphany.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/org.gnome.Epiphany.dockitem
+rename to skel/plank/dock1/launchers/org.gnome.Epiphany.dockitem
+diff --git a/plank/dock1/launchers/org.pantheon.mail.dockitem b/skel/plank/dock1/launchers/org.pantheon.mail.dockitem
+similarity index 100%
+rename from plank/dock1/launchers/org.pantheon.mail.dockitem
+rename to skel/plank/dock1/launchers/org.pantheon.mail.dockitem

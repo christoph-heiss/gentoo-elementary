@@ -1,0 +1,76 @@
+--- /src/Indicator.vala	2020-01-18 01:36:39.000000000 +0300
++++ /src/Indicator.vala	2020-03-02 22:34:47.329296300 +0300
+@@ -32,6 +32,7 @@
+     private Gtk.ModelButton user_settings;
+     private Gtk.ModelButton lock_screen;
+     private Gtk.ModelButton suspend;
++    private Gtk.ModelButton hibernate;
+     private Gtk.ModelButton shutdown;
+ 
+     private Session.Services.UserManager manager;
+@@ -101,6 +102,9 @@
+             shutdown.hexpand = true;
+             shutdown.text = _("Shut Down…");
+ 
++            hibernate = new Gtk.ModelButton ();
++            hibernate.text = _("Hibernate");
++
+             suspend = new Gtk.ModelButton ();
+             suspend.text = _("Suspend");
+ 
+@@ -129,6 +133,7 @@
+             }
+ 
+             main_grid.add (suspend);
++            main_grid.add (hibernate);
+             main_grid.add (shutdown);
+ 
+             if (keybinding_settings != null) {
+@@ -160,6 +165,7 @@
+         } catch (IOError e) {
+             stderr.printf ("%s\n", e.message);
+             suspend.set_sensitive (false);
++            hibernate.set_sensitive (false);
+         }
+ 
+         if (server_type == Wingpanel.IndicatorManager.ServerType.SESSION) {
+@@ -194,6 +200,16 @@
+ 
+         shutdown.clicked.connect (() => show_dialog (Widgets.EndSessionDialogType.RESTART));
+ 
++        hibernate.clicked.connect (() => {
++            close ();
++
++            try {
++                suspend_interface.hibernate (false);
++            } catch (GLib.Error e) {
++                stderr.printf ("%s\n", e.message);
++            }
++        });
++
+         suspend.clicked.connect (() => {
+             close ();
+ 
+--- /src/Services/DbusInterfaces.vala	2020-01-18 01:36:39.000000000 +0300
++++ /src/Services/DbusInterfaces.vala	2020-03-02 22:35:23.347057100 +0300
+@@ -37,6 +37,7 @@
+ [DBus (name = "org.freedesktop.login1.Manager")]
+ interface SystemInterface : Object {
+     public abstract void suspend (bool interactive) throws GLib.Error;
++    public abstract void hibernate (bool interactive) throws GLib.Error;
+     public abstract void reboot (bool interactive) throws GLib.Error;
+     public abstract void power_off (bool interactive) throws GLib.Error;
+ 
+--- /po/session-indicator.pot	2020-01-18 01:36:39.000000000 +0300
++++ /po/session-indicator.pot	2020-03-02 22:42:44.249973000 +0300
+@@ -41,6 +41,10 @@
+ msgid "Shut Down…"
+ msgstr ""
+ 
++#: src/Indicator.vala:109
++msgid "Hibernate"
++msgstr ""
++
+ #: src/Indicator.vala:105
+ msgid "Suspend"
+ msgstr ""
